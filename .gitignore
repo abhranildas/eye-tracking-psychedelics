@@ -1,0 +1,21 @@
+# Eye-tracker recordings -- ~2.9 GB across fixate/, free_view/data/, saccade/,
+# saccade/saccade_lr/ and spem/. Live on Drive, not in git.
+*.edf
+
+# Derived and setup artifacts. Shipped results whose variable names the analysis
+# code depends on (see docs/repo-cleanup.md section 4.1.1, zone 3), but too large
+# and too binary to version here.
+*.mat
+
+# IAPS stimulus set -- ~1000 licensed images plus rating spreadsheets.
+free_view/data/IAPS/
+
+# Talks, posters, abstracts and screen-capture videos (~186 MB of binaries).
+notes/
+
+# MATLAB editor and build leftovers
+*.asv
+*.autosave
+*.mex*
+slprj/
+codegen/
