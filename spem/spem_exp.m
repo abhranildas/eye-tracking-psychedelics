@@ -1,24 +1,85 @@
 function smooth_pursuit_exp
+% SMOOTH_PURSUIT_EXP  Run one session of the smooth-pursuit task with four distractors.
+%   smooth_pursuit_exp
 %
-% ___________________________________________________________________
+%   One session of the smooth-pursuit task, presented with Psychtoolbox and
+%   recorded on an EyeLink 1000. The target and its four distractors each move
+%   on a Lissajous curve; unlike spem_solo_exp, this file draws distractors
+%   alongside the target and demonstrates the EyeLink / Data Viewer stimulus
+%   integration. The trial list is not loaded from a .mat file: it is generated
+%   in code, hard-coded at the top of this file (see Inputs below).
 %
-% Demo implementation of pursuit task
-% stimulus: A target moving on a Lissajous curve
-% This task demonstrates stimuli presentation with Eyelink and Data Viewer
-% integration.
+%   The session runs in three phases. First a corner-marking phase: a white dot
+%   is shown for 5 s at each of the four screen corners in turn, recorded as
+%   trials 0.1 to 0.4, which gives the analysis chain four known screen
+%   positions to fit its calibration correction to (lib.preprocess_gaze reads
+%   them back as its 'corners' input). Then n_trials task trials, each
+%   trial_duration long: the target and its four distractors move
+%   continuously on independent Lissajous curves, all sharing the target's
+%   x-frequency/y-frequency pair rotated by one position per distractor.
+%   Finally the recording is closed, transferred off the Host PC and renamed.
 %
-% ___________________________________________________________________
+%   Each trial is bracketed by its own StartRecording / StopRecording pair and
+%   by TRIALID / TRIAL_RESULT messages, and the target's per-trial frequencies
+%   are written into the message stream for Data Viewer.
+%
+% Inputs
+%   None as arguments. What the function actually consumes:
+%
+%   setup.mat  none. Unlike the saccade pair, this file loads no trial list
+%              from disk -- the curve parameters are generated in code, right
+%              below the function line:
+%                n_trials       5, the number of task trials.
+%                freqs_target   [5x2] CYCLES PER TRIAL (not Hz), one row per
+%                               trial, columns [freq_x freq_y].
+%                phases_target  [5x1] RADIANS, initial phase of the target on
+%                               its Lissajous curve, one per trial.
+%                n_dist         4, the number of on-screen distractors.
+%                freqs_dist     [5x2x4] CYCLES PER TRIAL, freqs_target
+%                               row-circularly-shifted by 1..n_dist positions,
+%                               one page per distractor.
+%                phases_dist    [5x4] RADIANS, phases_target shifted the same
+%                               way.
+%   keyboard   one command-window prompt, read before any graphics open: the
+%              EDF file name to save under (1 to 8 characters, letters and
+%              digits only; the run aborts if <name>.edf already exists).
+%   hardware   display screen_number = 1, and a live EyeLink host. dummymode is
+%              0, so there is no simulated-tracker path: without a host this
+%              file cannot be run at all, not even as a dry run.
+%
+%   Timing and geometry are hard-coded at the top of the file and the names do
+%   not carry their units:
+%     trial_duration   30 SECONDS, how long each trial's motion runs.
+%     dot_radius       5 PIXELS, radius of the corner-marking dots.
+%     target_radius    2 PIXELS, radius of the moving target.
+%     dist_radius      5 PIXELS, radius of each moving distractor.
+%
+% Output
+%   None returned. The side effects are the point:
+%     - an EDF recording written on the EyeLink Host PC under the 8-character
+%       name held in edf_default ('smooth'), transferred into pwd at the end
+%       of the session and then renamed to the name typed at the prompt.
+%     - the Psychtoolbox window and the tracker connection, both closed by the
+%       nested cleanup function on every exit path, including the error path.
+%
+% Known bugs, recorded and deliberately NOT fixed here
+%   0.4.11  This file is named spem_exp.m but declares
+%              function smooth_pursuit_exp (checkcode FNDEF). Renaming the
+%              function to match the file is a real AST change and is Tier C,
+%              not this pass.
+%
+% See also SPEM_SOLO_EXP, SACCADE_EXP, SACCADE_LR_EXP, FIXATE_EXP,
+%   FREE_VIEW_EXP, LIB.PREPROCESS_GAZE, EYELINKINITDEFAULTS
 
 % HISTORY
 % mm/dd/yy
 %
 % 01/28/11  NJ  created
-% 12/20/13  LJ  changed isoctave to IsOctave, case sensitive for the latest matlab
-%                fixed issue with non integer arguments for Eyelink('message' ...) and Eyelink('command' ...)
-%
+% 12/20/13  LJ  changed isoctave to IsOctave, case sensitive for the latest
+%               matlab; fixed issue with non integer arguments for
+%               Eyelink('message' ...) and Eyelink('command' ...)
 
-
-n_trials=5;
+n_trials = 5;
 % freq_x freq_y
 freqs_target = [    3   2;
                     5   4;
@@ -27,12 +88,12 @@ freqs_target = [    3   2;
                     4   5]/2;
 phases_target = [pi/2; pi/2; 3*pi/4; 3*pi/4; pi];
 
-n_dist=4;
-freqs_dist=repmat(freqs_target,[1 1 n_dist]);
-phases_dist=repmat(phases_target,[1 n_dist]);
-for i_dist=1:n_dist
-    freqs_dist(:,:,i_dist)=circshift(freqs_dist(:,:,i_dist),i_dist,1);
-    phases_dist(:,i_dist)=circshift(phases_dist(:,i_dist),i_dist,1);
+n_dist = 4;
+freqs_dist = repmat(freqs_target, [1 1 n_dist]);
+phases_dist = repmat(phases_target, [1 n_dist]);
+for i_dist = 1:n_dist
+    freqs_dist(:, :, i_dist) = circshift(freqs_dist(:, :, i_dist), i_dist, 1);
+    phases_dist(:, i_dist) = circshift(phases_dist(:, i_dist), i_dist, 1);
 end
 
 % freq_scalars=linspace(.5,1.5,n_dist);
@@ -41,21 +102,18 @@ end
 %     % phases_dist(:,i_dist)=circshift(phases_dist(:,i_dist),i_dist,1);
 % end
 
-
 trial_duration = 30; % in sec
 
-dot_radius=5;
-target_radius=2;
-dist_radius=5;
-target_colour=100*[1 1 1];
+dot_radius = 5;
+target_radius = 2;
+dist_radius = 5;
+target_colour = 100*[1 1 1];
 
 if ~IsOctave
     commandwindow;
 else
     more off;
 end
-
-
 
 dummymode = 0;
 
@@ -73,9 +131,9 @@ try
     else
         prompt = 'File name: ';
         edf_default = 'smooth';
-        edf_file=input(prompt,'s');
+        edf_file = input(prompt, 's');
 
-        if exist([edf_file '.edf'],'file')
+        if exist([edf_file '.edf'], 'file')
             disp('The file exists!');
             return
         end
@@ -88,17 +146,17 @@ try
 
     % Open a graphics window on the main screen
     % using the PsychToolbox's Screen function.
-    screenNumber=1; %max(Screen('Screens'));
+    screen_number = 1; %max(Screen('Screens'));
     PsychDefaultSetup(2);
     Screen('Preference', 'SkipSyncTests', 1); % skip sync tests
 
-    [window, ~]=Screen('OpenWindow', screenNumber, 0,[],32,2); %#ok<*NASGU>
-    Screen(window,'BlendFunction',GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    [winWidth, winHeight] = WindowSize(window);
+    [window, ~] = Screen('OpenWindow', screen_number, 0, [], 32, 2); %#ok<*NASGU>
+    Screen(window, 'BlendFunction', GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    [win_width_px, win_height_px] = WindowSize(window);
 
-    % define amplitudes
-    amplitudeX = winWidth/3;
-    amplitudeY = winHeight/3;
+    % define amplitudes, PIXELS
+    amplitude_x_px = win_width_px/3;
+    amplitude_y_px = win_height_px/3;
 
     %%%%%%%%%%
     % STEP 3 %
@@ -109,7 +167,7 @@ try
     % in a structure that also contains useful defaults
     % and control codes (e.g. tracker state bit and Eyelink key values).
 
-    el=EyelinkInitDefaults(window);
+    el = EyelinkInitDefaults(window);
 
     % We are changing calibration to match task background and target
     % this eliminates affects of changes in luminosity between screens
@@ -117,13 +175,13 @@ try
     %     el.targetbeep = 0;
     el.backgroundcolour = 0*[1 1 1];
     el.msgfontcolour = 255;
-    el.calibrationtargetcolour= 255*[1 1 1];
+    el.calibrationtargetcolour = 255*[1 1 1];
     % for lower resolutions you might have to play around with these values
     % a little. If you would like to draw larger targets on lower res
     % settings please edit PsychEyelinkDispatchCallback.m and see comments
     % in the EyelinkDrawCalibrationTarget function
-    el.calibrationtargetsize= 1;
-    el.calibrationtargetwidth=0.5;
+    el.calibrationtargetsize = 1;
+    el.calibrationtargetwidth = 0.5;
     % call this function for changes to the el calibration structure to take
     % affect
     EyelinkUpdateDefaults(el);
@@ -141,9 +199,9 @@ try
         return;
     end
 
-    % open file to record data to
-    res = Eyelink('Openfile', edf_default);
-    if res~=0
+    % open file to record data to. open_file_status is 0 on success.
+    open_file_status = Eyelink('Openfile', edf_default);
+    if open_file_status~=0
         fprintf('Cannot create EDF file ''%s'' ', edf_default);
         cleanup;
         return;
@@ -167,37 +225,54 @@ try
 
     % This command is crucial to map the gaze positions from the tracker to
     % screen pixel positions to determine fixation
-    Eyelink('command','screen_pixel_coords = %ld %ld %ld %ld', 0, 0, winWidth-1, winHeight-1);
-    Eyelink('message', 'DISPLAY_COORDS %ld %ld %ld %ld', 0, 0, winWidth-1, winHeight-1);
+    Eyelink('command', 'screen_pixel_coords = %ld %ld %ld %ld', ...
+        0, 0, win_width_px - 1, win_height_px - 1);
+    Eyelink('message', 'DISPLAY_COORDS %ld %ld %ld %ld', ...
+        0, 0, win_width_px - 1, win_height_px - 1);
     % set calibration type.
     Eyelink('command', 'calibration_type = HV9');
     Eyelink('command', 'generate_default_targets = YES');
 
     % STEP 5.1 retrieve tracker version and tracker software version
-    [v,vs] = Eyelink('GetTrackerVersion');
-    fprintf('Running experiment on a ''%s'' tracker.\n', vs );
-    vsn = regexp(vs,'\d','match');
+    % tracker_version: integer model code, 3 = EyeLink 1000.
+    % tracker_version_str: the host's version banner.
+    % tracker_version_digits: its digits, one per cell, so {1} is the software
+    % major version.
+    [tracker_version, tracker_version_str] = Eyelink('GetTrackerVersion');
+    fprintf('Running experiment on a ''%s'' tracker.\n', tracker_version_str );
+    tracker_version_digits = regexp(tracker_version_str, '\d', 'match');
 
-    if v == 3 && str2double(vsn{1}) == 4 % if EL 1000 and tracker version 4.xx
+    % Which samples and events the tracker writes to the EDF file and sends
+    % over the link. The two branches differ only in HTARGET, the head-target
+    % data that only a 1000 in remote mode produces.
+    % if EL 1000 and tracker version 4.xx
+    if tracker_version == 3 && str2double(tracker_version_digits{1}) == 4
 
         % remote mode possible add HTARGET ( head target)
-        Eyelink('command', 'file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT');
-        Eyelink('command', 'file_sample_data  = LEFT,RIGHT,GAZE,HREF,AREA,GAZERES,STATUS,INPUT,HTARGET');
+        Eyelink('command', ...
+            'file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT');
+        Eyelink('command', ...
+            'file_sample_data  = LEFT,RIGHT,GAZE,HREF,AREA,GAZERES,STATUS,INPUT,HTARGET');
         % set link data (used for gaze cursor)
-        Eyelink('command', 'link_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,FIXUPDATE,INPUT');
-        Eyelink('command', 'link_sample_data  = LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT,HTARGET');
+        Eyelink('command', ...
+            'link_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,FIXUPDATE,INPUT');
+        Eyelink('command', ...
+            'link_sample_data  = LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT,HTARGET');
     else
-        Eyelink('command', 'file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT');
-        Eyelink('command', 'file_sample_data  = LEFT,RIGHT,GAZE,HREF,AREA,GAZERES,STATUS,INPUT');
+        Eyelink('command', ...
+            'file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT');
+        Eyelink('command', ...
+            'file_sample_data  = LEFT,RIGHT,GAZE,HREF,AREA,GAZERES,STATUS,INPUT');
         % set link data (used for gaze cursor)
-        Eyelink('command', 'link_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,FIXUPDATE,INPUT');
-        Eyelink('command', 'link_sample_data  = LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT');
+        Eyelink('command', ...
+            'link_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,FIXUPDATE,INPUT');
+        Eyelink('command', ...
+            'link_sample_data  = LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT');
     end
 
     % allow to use the big button on the eyelink gamepad to accept the
     % calibration/drift correction target
     Eyelink('command', 'button_function 5 "accept_target_fixation"');
-
 
     %%%%%%%%%%
     % STEP 6 %
@@ -214,19 +289,19 @@ try
 
     % show dots at the four corners so that we have reference for
     % correction later
-    corners=[0 0;
-        0 winHeight-2*dot_radius;
-        winWidth-2*dot_radius winHeight-2*dot_radius;
-        winWidth-2*dot_radius 0];
+    corners = [0 0;
+        0 win_height_px - 2*dot_radius;
+        win_width_px - 2*dot_radius win_height_px - 2*dot_radius;
+        win_width_px - 2*dot_radius 0];
 
-    for iCorner=1:4
+    for i_corner = 1:4
 
         % Sending a 'TRIALID' message to mark the start of a trial in Data
         % Viewer.  This is different than the start of recording message
         % START that is logged when the trial recording begins. The viewer
         % will not parse any messages, events, or samples, that exist in
         % the data file prior to this message.
-        Eyelink('Message', 'TRIALID 0.%d', iCorner);
+        Eyelink('Message', 'TRIALID 0.%d', i_corner);
 
         % This supplies the title at the bottom of the eyetracker display
         Eyelink('command', 'record_status_message "mark corners"');
@@ -252,11 +327,10 @@ try
         WaitSecs(0.05);
         Eyelink('StartRecording');
 
-
         % show corner dot
-        corner_pos([1 2])=corners(iCorner,:);
-        corner_pos([3 4])=corners(iCorner,:)+2*dot_radius;
-        Screen('FillOval', window,255*[1 1 1], corner_pos);
+        corner_pos([1 2]) = corners(i_corner, :);
+        corner_pos([3 4]) = corners(i_corner, :) + 2*dot_radius;
+        Screen('FillOval', window, 255*[1 1 1], corner_pos);
         Screen('Flip', window);
         WaitSecs(5);
 
@@ -272,7 +346,6 @@ try
         Eyelink('Message', 'TRIAL_RESULT 0');
     end
 
-
     % Now starts running individual trials
     % You can keep the rest of the code except for the implementation
     % of graphics and event monitoring
@@ -281,7 +354,7 @@ try
     % the time of critical events and the image/interest area/condition
     % information for the trial)
 
-    for iTrial=1:n_trials
+    for i_trial = 1:n_trials
 
         % STEP 7.1
         % Sending a 'TRIALID' message to mark the start of a trial in Data
@@ -289,10 +362,10 @@ try
         % START that is logged when the trial recording begins. The viewer
         % will not parse any messages, events, or samples, that exist in
         % the data file prior to this message.
-        Eyelink('Message', 'TRIALID %d', iTrial);
+        Eyelink('Message', 'TRIALID %d', i_trial);
 
         % This supplies the title at the bottom of the eyetracker display
-        Eyelink('command', 'record_status_message "TRIAL %d"', iTrial);
+        Eyelink('command', 'record_status_message "TRIAL %d"', i_trial);
         % Before recording, we place reference graphics on the host display
         % Must be in offline mode to transfer image to Host PC
         Eyelink('Command', 'set_idle_mode');
@@ -300,21 +373,22 @@ try
         Eyelink('Command', 'clear_screen %d', 0);
 
         % initial target location
-        phase_x = phases_target(iTrial);
+        phase_x = phases_target(i_trial);
         phase_y = 0;
-        x =  winWidth/2 + amplitudeX*sin(phase_x);
-        y =  winHeight/2 + amplitudeY*sin(phase_y);
-        target_pos([1 3]) = x+target_radius*[-1 1];
-        target_pos([2 4]) = y+target_radius*[-1 1];
+        x =  win_width_px/2 + amplitude_x_px*sin(phase_x);
+        y =  win_height_px/2 + amplitude_y_px*sin(phase_y);
+        target_pos([1 3]) = x + target_radius*[-1 1];
+        target_pos([2 4]) = y + target_radius*[-1 1];
 
         % initial distractor locations
-        for i_dist=1:n_dist
-            phase_x = phases_dist(iTrial,i_dist);
+        dist_pos = zeros(n_dist, 4);
+        for i_dist = 1:n_dist
+            phase_x = phases_dist(i_trial, i_dist);
             phase_y = 0;
-            x =  winWidth/2 + amplitudeX*sin(phase_x);
-            y =  winHeight/2 + amplitudeY*sin(phase_y);
-            dist_pos(i_dist,[1 3]) = x+dist_radius*[-1 1];
-            dist_pos(i_dist,[2 4]) = y+dist_radius*[-1 1];
+            x =  win_width_px/2 + amplitude_x_px*sin(phase_x);
+            y =  win_height_px/2 + amplitude_y_px*sin(phase_y);
+            dist_pos(i_dist, [1 3]) = x + dist_radius*[-1 1];
+            dist_pos(i_dist, [2 4]) = y + dist_radius*[-1 1];
         end
 
         WaitSecs(0.1);
@@ -343,9 +417,9 @@ try
         % get eye that's tracked
         %         eye_used = Eyelink('EyeAvailable');
 
-        trialTime = GetSecs + trial_duration;
-        sttime = GetSecs;
-        while GetSecs < trialTime
+        trial_end_time = GetSecs + trial_duration;
+        trial_start_time = GetSecs;
+        while GetSecs < trial_end_time
 
             % STEP 7.4
             % Prepare and show the screen.
@@ -353,38 +427,39 @@ try
             % for drawing of smoothed points:
             %             Screen('BlendFunction', window, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             %             Screen('FillRect', window, el.backgroundcolour);
-            Screen('FillOval', window,target_colour, target_pos);
-            for i_dist=1:n_dist
-                Screen('FillOval', window,target_colour, dist_pos(i_dist,:));
+            Screen('FillOval', window, target_colour, target_pos);
+            for i_dist = 1:n_dist
+                Screen('FillOval', window, target_colour, dist_pos(i_dist, :));
             end
             Screen('Flip', window);
             Eyelink('Message', 'SYNCTIME');
             % STEP 7.5
             % send the location of the target at each iteration so that
             % target can be displayed in Dataviewer
-            Eyelink('message', '!V TARGET_POS TARG1 (%d, %d) 1 0',floor(x),floor(y));
-
+            Eyelink('message', '!V TARGET_POS TARG1 (%d, %d) 1 0', floor(x), floor(y));
 
             % update target location
-            phase_x = phases_target(iTrial) + (GetSecs-sttime) * freqs_target(iTrial,1);
-            phase_y = (GetSecs-sttime) * freqs_target(iTrial,2);
+            phase_x = phases_target(i_trial) + ...
+                (GetSecs - trial_start_time) * freqs_target(i_trial, 1);
+            phase_y = (GetSecs - trial_start_time) * freqs_target(i_trial, 2);
 
-            x =  winWidth/2 + amplitudeX*sin(phase_x);
-            y =  winHeight/2 + amplitudeY*sin(phase_y);
+            x =  win_width_px/2 + amplitude_x_px*sin(phase_x);
+            y =  win_height_px/2 + amplitude_y_px*sin(phase_y);
 
-            target_pos([1 3]) = x+target_radius*[-1 1];
-            target_pos([2 4]) = y+target_radius*[-1 1];
+            target_pos([1 3]) = x + target_radius*[-1 1];
+            target_pos([2 4]) = y + target_radius*[-1 1];
 
             % update distractor locations
-            for i_dist=1:n_dist
-                phase_x = phases_dist(iTrial) + (GetSecs-sttime) * freqs_dist(iTrial,1,i_dist);
-                phase_y = (GetSecs-sttime) * freqs_dist(iTrial,2,i_dist);
+            for i_dist = 1:n_dist
+                phase_x = phases_dist(i_trial) + ...
+                    (GetSecs - trial_start_time) * freqs_dist(i_trial, 1, i_dist);
+                phase_y = (GetSecs - trial_start_time) * freqs_dist(i_trial, 2, i_dist);
 
-                x =  winWidth/2 + amplitudeX*sin(phase_x);
-                y =  winHeight/2 + amplitudeY*sin(phase_y);
+                x =  win_width_px/2 + amplitude_x_px*sin(phase_x);
+                y =  win_height_px/2 + amplitude_y_px*sin(phase_y);
 
-                dist_pos(i_dist,[1 3]) = x+dist_radius*[-1 1];
-                dist_pos(i_dist,[2 4]) = y+dist_radius*[-1 1];
+                dist_pos(i_dist, [1 3]) = x + dist_radius*[-1 1];
+                dist_pos(i_dist, [2 4]) = y + dist_radius*[-1 1];
             end
 
         end
@@ -415,17 +490,15 @@ try
         % Message Commands" section of the EyeLink Data Viewer User Manual
         WaitSecs(0.001);
 
-
-        Eyelink('Message', '!V TRIAL_VAR index %d', iTrial);
+        Eyelink('Message', '!V TRIAL_VAR index %d', i_trial);
 
         % a limitation of the currect ETB only accepts ints as input to
         % messages and commands a possible work around is given below
 
-
-        msg1 = sprintf('!V TRIAL_VAR freq_x %2.3f ', freqs_target(iTrial,1));
-        msg2 = sprintf('!V TRIAL_VAR freq_y %2.3f ', freqs_target(iTrial,2));
-        Eyelink('Message', msg1);
-        Eyelink('Message', msg2);
+        msg_freq_x = sprintf('!V TRIAL_VAR freq_x %2.3f ', freqs_target(i_trial, 1));
+        msg_freq_y = sprintf('!V TRIAL_VAR freq_y %2.3f ', freqs_target(i_trial, 2));
+        Eyelink('Message', msg_freq_x);
+        Eyelink('Message', msg_freq_y);
 
         % STEP 7.8
         % Sending a 'TRIAL_RESULT' message to mark the end of a trial in
@@ -449,7 +522,7 @@ try
 
     try
         fprintf('Receiving data file ''%s''\n', edf_default );
-        status=Eyelink('ReceiveFile');
+        status = Eyelink('ReceiveFile');
         if status > 0
             fprintf('ReceiveFile status %d\n', status);
         end
@@ -460,9 +533,10 @@ try
         fprintf('Problem receiving data file ''%s''\n', edf_default );
     end
 
-    % rename file
+    % rename the transferred file from the Host PC name to the name typed at
+    % the prompt in STEP 1
     if ~strcmp(edf_default, edf_file)
-        movefile([edf_default '.edf'],[edf_file '.edf']);
+        movefile([edf_default '.edf'], [edf_file '.edf']);
     end
 
     %%%%%%%%%%
